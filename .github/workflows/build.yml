@@ -1,0 +1,35 @@
+name: macOS build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Prepare pinned sources
+        run: python3 prepare_vendor.py --download
+      - name: Build
+        run: python3 build.py ./dist
+      - name: Check renderer, pairing, and signature
+        run: |
+          "./dist/Device Mirror.app/Contents/MacOS/DeviceMirror" --render-test
+          "./dist/Device Mirror.app/Contents/MacOS/DeviceMirror" --protocol-test
+          codesign --verify --deep --strict "./dist/Device Mirror.app"
+      - name: Package app and corresponding source
+        run: python3 scripts/package_release.py
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: DeviceMirror-${{ runner.arch }}
+          path: |
+            release/*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
