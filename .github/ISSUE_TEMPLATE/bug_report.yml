@@ -1,0 +1,34 @@
+name: Bug report / 问题反馈
+description: Report a connection, display, or window-sharing problem.
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Versions / 版本
+      description: Device Mirror version, macOS version, Mac chip, and iPadOS version.
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection / 连接方式
+      options:
+        - AirPlay
+        - USB
+        - Both / 两种都有
+        - Other / 其他
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened? / 问题描述
+      description: Include steps to reproduce and what you expected. For sharing problems, include the meeting app or browser version and whether Device Mirror itself still updates.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Connection diagnostics / 连接诊断
+      description: Paste the text from “复制连接诊断” if relevant. Remove personal details before posting publicly; do not include pairing keys or meeting links.
+      render: text

@@ -1,0 +1,23 @@
+{
+  "uxplay": {
+    "version": "1.73.7",
+    "commit": "df67c212a433cf6dda3676dd40c097900d24e645",
+    "url": "https://github.com/FDH2/UxPlay",
+    "sha256": "168de53ed688f87c4022d79357ce91f9608ad5c53236bff95134d19b88efeb3f",
+    "archive_url": "https://codeload.github.com/FDH2/UxPlay/tar.gz/df67c212a433cf6dda3676dd40c097900d24e645"
+  },
+  "openssl": {
+    "version": "3.6.5",
+    "commit": "c8bd5a57108599ac650bbae77fcabe3109dab2e8",
+    "url": "https://github.com/openssl/openssl",
+    "sha256": "dcd6ac7e568a106deddfb1785407fdb89073f121532dcdb049979cd72d8e7713",
+    "archive_url": "https://codeload.github.com/openssl/openssl/tar.gz/c8bd5a57108599ac650bbae77fcabe3109dab2e8"
+  },
+  "libplist": {
+    "version": "2.8.0",
+    "tag": "2.8.0",
+    "url": "https://github.com/libimobiledevice/libplist",
+    "sha256": "9c8923a74ad95f16e07fef94b43f7d8c9a5583b4973f1e41dbf25427f388fdee",
+    "archive_url": "https://codeload.github.com/libimobiledevice/libplist/tar.gz/refs/tags/2.8.0"
+  }
+}

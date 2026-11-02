@@ -1,0 +1,132 @@
+--- a/lib/pairing.h
++++ b/lib/pairing.h
+@@ -1,3 +1,5 @@
++/* Modified for Device Mirror on 2026-11-01: correct 20-byte legacy PIN
++ * proof validation, bound-check pairing payloads, and report pairing stages. */
+ /**
+  *  Copyright (C) 2018  Juho Vähä-Herttua
+  *  Copyright (C) 2020  Jaslo Ziska
+@@ -28,6 +30,7 @@
+ #define SRP_PK_SIZE 256
+ #define SRP_SHA SRP_SHA1
+ #define SRP_NG SRP_NG_2048
++#define SRP_PROOF_SIZE 20
+ #define SRP_M2_SIZE 64
+ #define SRP_PRIVATE_KEY_SIZE 32
+ #define GCM_AUTHTAG_SIZE 16
+--- a/lib/pairing.c
++++ b/lib/pairing.c
+@@ -1,3 +1,5 @@
++/* Modified for Device Mirror on 2026-11-01: correct 20-byte legacy PIN
++ * proof validation, bound-check pairing payloads, and report pairing stages. */
+ /**
+  *  Copyright (C) 2018  Juho Vähä-Herttua
+  *  Copyright (C) 2020  Jaslo Ziska
+@@ -555,6 +557,10 @@
+ int
+ srp_validate_proof(pairing_session_t *session, pairing_t *pairing, const unsigned char *A,
+                     int len_A, unsigned char *proof, int client_proof_len, int proof_len) {
++    if (!session || !session->srp || !A || len_A < 1 || len_A > SRP_PK_SIZE ||
++        !proof || client_proof_len != SRP_PROOF_SIZE || proof_len != SRP_PROOF_SIZE) {
++        return -1;
++    }
+     int authenticated  = 0;
+     const unsigned char *B =  NULL;
+     const unsigned char *b = session->srp->private_key;
+@@ -571,6 +577,11 @@
+                                                     b, len_b,
+                                                     &B, &len_B, NULL, NULL, 1);
+ 
++    if (!verifier) {
++        free(session->srp);
++        session->srp = NULL;
++        return -1;
++    }
+     srp_verifier_verify_session(verifier, proof, &M2);
+     authenticated = srp_verifier_is_authenticated(verifier);
+     if (authenticated == 0) {
+@@ -592,6 +603,7 @@
+ int
+ srp_confirm_pair_setup(pairing_session_t *session, pairing_t *pairing,
+                        unsigned char *epk, unsigned char *auth_tag) {
++    if (!session || !session->srp || !epk || !auth_tag) return -1;
+     unsigned char aesKey[16] = {0}, aesIV[16] = {0};
+     unsigned char hash[SHA512_DIGEST_LENGTH] = {0};
+     unsigned char pk[ED25519_KEY_SIZE] = {0};
+--- a/lib/raop_handlers.h
++++ b/lib/raop_handlers.h
+@@ -1,3 +1,5 @@
++/* Modified for Device Mirror on 2026-11-01: correct 20-byte legacy PIN
++ * proof validation, bound-check pairing payloads, and report pairing stages. */
+ /**
+  *  Copyright (C) 2018  Juho Vähä-Herttua
+  *
+@@ -344,6 +346,7 @@
+         plist_t res_pk_node = plist_new_data(pk, len_pk);
+         plist_dict_set_item(res_root_node, "pk", res_pk_node);	
+         plist_dict_set_item(res_root_node, "salt", res_salt_node);
++        logger_log(raop->logger, LOGGER_INFO, "DeviceMirror pairing: challenge sent");
+         plist_to_bin(res_root_node, response_data, (uint32_t*) response_datalen);
+         plist_free(res_root_node);
+         http_response_add_header(response, "Content-Type", "application/x-apple-binary-plist");
+@@ -352,7 +355,7 @@
+         /* this is the second part of pair-setup-pin request */
+         char *client_pk = NULL;
+         char *client_proof = NULL;
+-        unsigned char proof[64] = { '\0' };
++        unsigned char proof[SRP_PROOF_SIZE] = { '\0' };
+         memset(proof, 0, sizeof(proof));
+         uint64_t client_pk_len = 0;
+         uint64_t client_proof_len = 0;
+@@ -360,6 +363,9 @@
+         plist_get_data_val(req_proof_node, &client_proof, &client_proof_len);
+         if (client_proof_len != sizeof(proof)) {
+             logger_log(raop->logger, LOGGER_ERR, "Client Authentication Failure (client_proof_len %d invalid)", (int) client_proof_len);
++            free(client_pk);
++            free(client_proof);
++            plist_free(req_root_node);
+             goto authentication_failed;
+         }
+         if (logger_debug) {
+@@ -383,7 +389,8 @@
+             free (str);
+         }
+         plist_t res_root_node = plist_new_dict();
+-        plist_t res_proof_node = plist_new_data((const char *) proof, 20);
++        logger_log(raop->logger, LOGGER_INFO, "DeviceMirror pairing: client proof verified");
++        plist_t res_proof_node = plist_new_data((const char *) proof, SRP_PROOF_SIZE);
+         plist_dict_set_item(res_root_node, "proof", res_proof_node);	
+         plist_to_bin(res_root_node, response_data, (uint32_t*) response_datalen);
+         plist_free(res_root_node);
+@@ -400,6 +407,13 @@
+         int ret = 0;
+         plist_get_data_val(req_epk_node, &client_epk, &client_epk_len); 
+         plist_get_data_val(req_authtag_node, &client_authtag, &client_authtag_len);
++        if (client_epk_len != sizeof(epk) || client_authtag_len != sizeof(authtag)) {
++            free(client_epk);
++            free(client_authtag);
++            plist_free(req_root_node);
++            logger_log(raop->logger, LOGGER_ERR, "DeviceMirror pairing: invalid encrypted key lengths");
++            goto authentication_failed;
++        }
+ 
+         if (logger_debug) {
+             char *str = utils_data_to_string((const unsigned char *) client_epk, client_epk_len, 16);
+@@ -419,7 +433,7 @@
+             logger_log(raop->logger, LOGGER_ERR, "pair-pin-setup (step 3): client authentication failed\n");
+             goto authentication_failed;
+         } else {
+-            logger_log(raop->logger, LOGGER_DEBUG, "pair-pin-setup success\n");
++            logger_log(raop->logger, LOGGER_INFO, "DeviceMirror pairing: trusted keys exchanged");
+         }
+         pairing_session_set_setup_status(conn->session);
+         plist_t res_root_node = plist_new_dict();
+@@ -539,7 +553,7 @@
+             http_response_set_disconnect(response, 1);
+             return;
+         }
+-        logger_log(raop->logger, LOGGER_DEBUG, "pair-verify: signature is verified");	    
++        logger_log(raop->logger, LOGGER_INFO, "DeviceMirror pairing: verification complete");	    
+         http_response_add_header(response, "Content-Type", "application/octet-stream");
+         break;
+     }
